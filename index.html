@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>手機回收契約產生器</title>
+  
+  <!-- 引入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 React 核心庫 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 引入 Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- 圖示元件 ---
+    const IconSmartphone = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>;
+    const IconScanLine = ({ size = 20, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 7 3 3 7 3"></polyline><polyline points="17 3 21 3 21 7"></polyline><polyline points="21 17 21 21 17 21"></polyline><polyline points="7 21 3 21 3 17"></polyline><line x1="7" y1="12" x2="17" y2="12"></line></svg>;
+    const IconCamera = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>;
+    const IconPenTool = ({ size = 16, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>;
+    const IconFileCheck = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="9 15 11 17 15 11"></polyline></svg>;
+    const IconDownload = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+    const IconX = ({ size = 20, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+    const IconAlertTriangle = ({ size = 20, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+
+    function App() {
+      const [step, setStep] = useState(1);
+      const [formData, setFormData] = useState({
+        storeName: '立方通訊', name: '', phone: '', idNumber: '', brand: '', model: '', imei: '', amount: ''
+      });
+      const [images, setImages] = useState({ idFront: null, idBack: null, signature: null });
+      const [showScanner, setShowScanner] = useState(false);
+      const [showSignature, setShowSignature] = useState(false);
+      const [previewDataUrl, setPreviewDataUrl] = useState(null);
+
+      const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+      };
+
+      const handleImageUpload = (e, type) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setImages(prev => ({ ...prev, [type]: event.target.result }));
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      const parseAmount = (amountStr) => {
+        const amount = parseInt(amountStr, 10);
+        if (isNaN(amount)) return { wan: '', qian: '', bai: '' };
+        return {
+          wan: Math.floor(amount / 10000) > 0 ? Math.floor(amount / 10000).toString() : '',
+          qian: Math.floor((amount % 10000) / 1000).toString(),
+          bai: Math.floor((amount % 1000) / 100).toString()
+        };
+      };
+
+      const loadImage = (src) => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = src;
+        });
+      };
+
+      // 下載 JPG 的安全做法 (避免手機瀏覽器阻擋大量資料的 Data URI 下載)
+      const handleDownloadClick = () => {
+        if (!previewDataUrl) return;
+        
+        // 取得 IMEI 末 6 碼作為檔名，若無提供則使用時間戳防呆
+        let fileName = `手機回收契約_${new Date().getTime()}.jpg`;
+        if (formData.imei) {
+          fileName = `${formData.imei.slice(-6)}.jpg`;
+        }
+        
+        fetch(previewDataUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(blobUrl);
+            document.body.removeChild(a);
+          })
+          .catch(err => {
+            // Fallback: 如果 Blob 失敗，退回使用傳統方式
+            const a = document.createElement('a');
+            a.href = previewDataUrl;
+            a.download = fileName;
+            a.click();
+          });
+      };
+
+      const generatePreview = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1240; 
+          canvas.height = 1754; 
+          const ctx = canvas.getContext('2d');
+          
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          ctx.fillStyle = '#000000';
+          const paddingLeft = 100; // 邊距往左拉一點
+
+          // 標題字體
+          ctx.font = 'bold 50px "Microsoft JhengHei", "PingFang TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText('買　賣　契　約　書', canvas.width / 2, 180);
+
+          // 內容字體稍微縮小為 28px，避免超出邊界
+          ctx.font = '28px "Microsoft JhengHei", "PingFang TC", sans-serif';
+          ctx.textAlign = 'left';
+
+          // 繪製包含底線與資料的輔助函式
+          const drawLineWithData = (label, data, x, y, lineLength) => {
+            ctx.fillText(label, x, y);
+            const labelWidth = ctx.measureText(label).width;
+            const startLineX = x + labelWidth + 10;
+            
+            if (data) {
+              ctx.textAlign = 'center';
+              ctx.fillText(data, startLineX + lineLength / 2, y - 2);
+              ctx.textAlign = 'left';
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(startLineX, y + 5);
+            ctx.lineTo(startLineX + lineLength, y + 5);
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            return startLineX + lineLength + 20; 
+          };
+
+          // --- 第 1 行：茲本人、品牌、型號 ---
+          // 稍微縮減畫線長度，避免超出右側邊界
+          let currentX = paddingLeft;
+          currentX = drawLineWithData('茲本人', formData.name, currentX, 300, 160);
+          currentX = drawLineWithData('所有品牌', formData.brand, currentX, 300, 220);
+          drawLineWithData('型號', formData.model, currentX, 300, 260);
+
+          // --- 第 2 行：序號 ---
+          drawLineWithData('序號', formData.imei, paddingLeft, 400, 900);
+
+          // --- 第 3~6 行：聲明條文 (手動精準換行，避免右側超出邊界不見) ---
+          let contentY = 520;
+          let lineGap = 70;
+          const storeLabel = formData.storeName || '　　　　';
+          ctx.fillText(`　　本人確實讓渡無訛，保證來源正常，為個人所有，自即日起交由　${storeLabel}　管理，`, paddingLeft, contentY);
+          ctx.fillText('嗣後如有衍生民、刑事、及其糾紛等情事，概由本人負全責且放棄先訴抗辯權，並與貴', paddingLeft, contentY + lineGap);
+          ctx.fillText('公司無關，', paddingLeft, contentY + lineGap * 2);
+          ctx.fillText('口說無憑，特立此據為證', paddingLeft, contentY + lineGap * 3);
+
+          // --- 第 7~8 行：此致 台照 ---
+          ctx.fillText('此致', paddingLeft, contentY + lineGap * 4 + 40);
+          ctx.fillText('　　　　台照', paddingLeft, contentY + lineGap * 5 + 40);
+
+          // --- 第 9 行：交易金額 ---
+          const parsedAmount = parseAmount(formData.amount);
+          currentX = paddingLeft + 100;
+          currentX = drawLineWithData('交易金額（新台幣）：', parsedAmount.wan, currentX, 1020, 80);
+          currentX = drawLineWithData('萬', parsedAmount.qian, currentX, 1020, 80);
+          currentX = drawLineWithData('仟', parsedAmount.bai, currentX, 1020, 80);
+          ctx.fillText('佰元整', currentX, 1020);
+
+          // --- 右下角：立切結人資訊 ---
+          const signerInfoX = 700;
+          ctx.fillText('立切結人：', signerInfoX, 1140);
+          
+          if (images.signature) {
+            const sigImg = await loadImage(images.signature);
+            ctx.drawImage(sigImg, signerInfoX + 140, 1060, 250, 100); 
+          }
+          
+          ctx.fillText(`身份證字號： ${formData.idNumber}`, signerInfoX, 1210);
+          ctx.fillText(`電話： ${formData.phone}`, signerInfoX, 1280);
+
+          // --- 左下角：日期 ---
+          const today = new Date();
+          const rocYear = (today.getFullYear() - 1911).toString();
+          const month = (today.getMonth() + 1).toString();
+          const day = today.getDate().toString();
+
+          currentX = paddingLeft + 150;
+          currentX = drawLineWithData('中華民國', rocYear, currentX, 1340, 80);
+          currentX = drawLineWithData('年', month, currentX, 1340, 60);
+          currentX = drawLineWithData('月', day, currentX, 1340, 60);
+          ctx.fillText('日', currentX, 1340);
+
+          // --- 身分證區塊 (加入強化的浮水印) ---
+          const drawIDCard = async (src, x, y, label) => {
+            const w = 420;
+            const h = 260;
+            
+            // 畫虛線框
+            ctx.setLineDash([10, 10]);
+            ctx.strokeStyle = '#999999';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]); // 恢復實線
+
+            if (src) {
+              const img = await loadImage(src);
+              // 計算等比例縮放以適應
+              ctx.drawImage(img, x, y, w, h);
+
+              // --- 加入浮水印 ---
+              ctx.save(); // 儲存當前畫布狀態
+              ctx.translate(x + w / 2, y + h / 2); // 將原點移動到圖片中心
+              ctx.rotate(-30 * Math.PI / 180); // 旋轉 -30 度
+
+              ctx.font = 'bold 45px "Microsoft JhengHei", "PingFang TC", sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+
+              // 1. 畫白色粗邊框 (確保深色背景下依然清楚)
+              ctx.lineWidth = 6;
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.strokeText("回收設備專用", 0, 0);
+
+              // 2. 畫紅色半透明字體
+              ctx.fillStyle = 'rgba(255, 0, 0, 0.6)'; 
+              ctx.fillText("回收設備專用", 0, 0);
+
+              ctx.restore(); // 恢復畫布狀態
+              // -----------------
+
+            } else {
+              ctx.fillStyle = '#999999';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(label, x + w / 2, y + h / 2);
+              // 恢復設定
+              ctx.fillStyle = '#000000';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'bottom';
+            }
+          };
+
+          await drawIDCard(images.idFront, paddingLeft + 50, 1420, '身分證正面放置區');
+          await drawIDCard(images.idBack, paddingLeft + 550, 1420, '身分證反面放置區');
+
+          setPreviewDataUrl(canvas.toDataURL('image/jpeg', 0.9));
+          setStep(2);
+
+        } catch (error) {
+          alert("產生預覽時發生錯誤！");
+          console.error(error);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-100 text-gray-800 pb-20 font-sans">
+          <header className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-md relative">
+            <h1 className="text-xl font-bold text-center flex items-center justify-center gap-2">
+              <IconSmartphone size={24} />
+              手機回收契約產生器
+            </h1>
+          </header>
+
+          <main className="max-w-lg mx-auto p-4 space-y-6 mt-2">
+            
+            {step === 1 && (
+              <div className="space-y-6">
+                
+                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-sm">1</span>
+                    店家資訊
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">店名 (合約管理方)</label>
+                      <input type="text" name="storeName" value={formData.storeName} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：某某通訊行" />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-sm">2</span>
+                    客戶基本資料
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                      <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：王小明" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">聯絡電話</label>
+                      <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：0912345678" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">身分證字號</label>
+                      <input type="text" name="idNumber" value={formData.idNumber} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：A123456789" />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-sm">3</span>
+                    回收裝置資料
+                  </h2>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">廠牌</label>
+                        <input type="text" name="brand" value={formData.brand} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：Apple" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">型號</label>
+                        <input type="text" name="model" value={formData.model} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：iPhone 15" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">IMEI (或 S/N 序號)</label>
+                      <div className="flex gap-2">
+                        <input type="text" name="imei" value={formData.imei} onChange={handleInputChange} className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="手動輸入或掃描" />
+                        <button onClick={() => setShowScanner(true)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg border border-gray-300 flex items-center justify-center transition">
+                          <IconScanLine size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">交易金額 (新台幣)</label>
+                      <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：15000" />
+                      <p className="text-xs text-gray-500 mt-1">系統將自動轉換為萬、仟、佰格式填入合約</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-sm">4</span>
+                    附件與簽名
+                  </h2>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="border border-dashed border-gray-300 rounded-lg p-2 flex flex-col items-center justify-center text-center relative overflow-hidden h-32 bg-gray-50">
+                        {images.idFront ? (
+                          <img src={images.idFront} alt="身分證正面" className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                        ) : (
+                          <IconCamera className="text-gray-400 mb-2" size={24} />
+                        )}
+                        <label className="relative z-10 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border border-gray-200 shadow-sm">
+                          {images.idFront ? '重新拍攝正面' : '拍攝正面'}
+                          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(e, 'idFront')} />
+                        </label>
+                      </div>
+                      <div className="border border-dashed border-gray-300 rounded-lg p-2 flex flex-col items-center justify-center text-center relative overflow-hidden h-32 bg-gray-50">
+                        {images.idBack ? (
+                          <img src={images.idBack} alt="身分證反面" className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                        ) : (
+                          <IconCamera className="text-gray-400 mb-2" size={24} />
+                        )}
+                        <label className="relative z-10 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border border-gray-200 shadow-sm">
+                          {images.idBack ? '重新拍攝反面' : '拍攝反面'}
+                          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(e, 'idBack')} />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="border border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center bg-gray-50 h-32 relative">
+                        {images.signature ? (
+                           <img src={images.signature} alt="簽名" className="absolute inset-0 w-full h-full object-contain p-2 mix-blend-multiply" />
+                        ) : (
+                          <p className="text-gray-400 text-sm mb-3">尚未簽名</p>
+                        )}
+                        <button onClick={() => setShowSignature(true)} className="relative z-10 bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-blue-200 transition shadow-sm">
+                          <IconPenTool size={16} />
+                          {images.signature ? '重新簽名' : '點擊此處簽名'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="pt-4">
+                  <button onClick={generatePreview} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                    <IconFileCheck size={24} />
+                    產生契約書預覽
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && previewDataUrl && (
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center mt-2">
+                <div className="w-full flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-bold">合約預覽</h2>
+                  <button onClick={() => setStep(1)} className="text-gray-500 hover:text-gray-700 text-sm flex items-center gap-1">
+                    <IconPenTool size={14}/> 返回修改
+                  </button>
+                </div>
+                
+                <div className="border border-gray-200 rounded p-2 bg-gray-50 w-full mb-3 overflow-hidden relative" style={{ minHeight: '300px' }}>
+                  <img src={previewDataUrl} alt="契約書預覽" className="w-full h-auto rounded shadow-sm" />
+                </div>
+                <p className="text-xs text-red-500 mb-4 font-bold">
+                  * 提示：如果點擊按鈕沒有反應，請直接「長按上方圖片」儲存。
+                </p>
+
+                <button 
+                  onClick={handleDownloadClick}
+                  className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-center"
+                >
+                  <IconDownload size={24} />
+                  下載 JPG 檔案
+                </button>
+              </div>
+            )}
+
+          </main>
+
+          {showScanner && (
+            <BarcodeScannerModal 
+              onScan={(result) => {
+                setFormData(prev => ({ ...prev, imei: result }));
+                setShowScanner(false);
+              }}
+              onClose={() => setShowScanner(false)}
+            />
+          )}
+
+          {showSignature && (
+            <SignatureModal 
+              onSave={(dataUrl) => {
+                setImages(prev => ({ ...prev, signature: dataUrl }));
+                setShowSignature(false);
+              }}
+              onClose={() => setShowSignature(false)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // --- 子組件：條碼掃描器 (加入安全偵測與錯誤提示) ---
+    function BarcodeScannerModal({ onScan, onClose }) {
+      const scannerRef = useRef(null);
+      const [errorMsg, setErrorMsg] = useState("");
+
+      useEffect(() => {
+        // 1. 偵測環境是否為 HTTP / FILE 協定 (這會導致相機被瀏覽器阻擋)
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const isSecure = window.location.protocol === 'https:' || isLocalhost;
+        
+        if (!isSecure) {
+          setErrorMsg("⚠️ 瀏覽器安全限制：掃描功能必須將網站發布至 HTTPS 環境 (或 localhost) 才能開啟相機。目前環境無法存取鏡頭。");
+        }
+
+        // 2. 載入掃描套件
+        const loadHtml5Qrcode = async () => {
+          try {
+            if (!window.Html5QrcodeScanner) {
+              const script = document.createElement('script');
+              script.src = "https://unpkg.com/html5-qrcode";
+              script.async = true;
+              document.body.appendChild(script);
+              await new Promise((resolve, reject) => { 
+                script.onload = resolve; 
+                script.onerror = reject;
+              });
+            }
+
+            const html5QrcodeScanner = new window.Html5QrcodeScanner(
+              "reader",
+              { 
+                fps: 10, 
+                qrbox: {width: 250, height: 150}, 
+                aspectRatio: 1.0,
+                videoConstraints: { facingMode: "environment" } // 強制使用後置鏡頭
+              },
+              false
+            );
+            
+            scannerRef.current = html5QrcodeScanner;
+            html5QrcodeScanner.render((decodedText) => {
+              if(scannerRef.current) scannerRef.current.clear();
+              onScan(decodedText);
+            }, (error) => {
+              // 此處會捕捉每一幀掃描不到條碼的錯誤，為正常現象，不需處理
+            });
+          } catch (err) {
+            setErrorMsg("相機初始化失敗，請確認已在系統設定允許瀏覽器使用相機！");
+            console.error(err);
+          }
+        };
+
+        loadHtml5Qrcode();
+
+        return () => {
+          if (scannerRef.current) scannerRef.current.clear().catch(e => console.error(e));
+        };
+      }, [onScan]);
+
+      return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="p-4 flex justify-between items-center bg-gray-50 border-b">
+              <h3 className="font-bold">掃描 IMEI / 條碼</h3>
+              <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800"><IconX size={20} /></button>
+            </div>
+            
+            {/* 錯誤訊息區塊 */}
+            {errorMsg && (
+              <div className="bg-red-50 p-3 text-red-600 text-sm flex gap-2 items-start border-b border-red-100">
+                <IconAlertTriangle className="shrink-0 mt-0.5" size={16} />
+                <p>{errorMsg}</p>
+              </div>
+            )}
+
+            <div className="p-4 relative bg-black min-h-[300px] flex items-center justify-center">
+              <div id="reader" className="w-full text-white bg-black"></div>
+            </div>
+            <div className="p-4 bg-gray-50 text-center text-sm text-gray-500">
+              請將手機條碼對準畫面中央<br/>
+              (如果長時間無畫面，請檢查相機權限)
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 子組件：手寫簽名板 ---
+    function SignatureModal({ onSave, onClose }) {
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.parentElement.getBoundingClientRect();
+          canvas.width = rect.width;
+          canvas.height = 200; 
+          const ctx = canvas.getContext('2d');
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#000000';
+        }
+      }, []);
+
+      const getCoordinates = (event, canvas) => {
+        const rect = canvas.getBoundingClientRect();
+        let clientX, clientY;
+        if (event.touches && event.touches.length > 0) {
+          clientX = event.touches[0].clientX;
+          clientY = event.touches[0].clientY;
+        } else {
+          clientX = event.clientX;
+          clientY = event.clientY;
+        }
+        return { x: clientX - rect.left, y: clientY - rect.top };
+      };
+
+      const startDrawing = (e) => {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = getCoordinates(e, canvas);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        setIsDrawing(true);
+      };
+
+      const draw = (e) => {
+        e.preventDefault();
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = getCoordinates(e, canvas);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      };
+
+      const stopDrawing = () => {
+        if (isDrawing) {
+          const ctx = canvasRef.current.getContext('2d');
+          ctx.closePath();
+          setIsDrawing(false);
+        }
+      };
+
+      const clearCanvas = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-4 flex justify-between items-center bg-gray-50 border-b">
+              <h3 className="font-bold">請在下方簽名</h3>
+              <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800"><IconX size={20} /></button>
+            </div>
+            <div className="p-4 bg-gray-200">
+              <div className="bg-white rounded border-2 border-gray-300 shadow-inner overflow-hidden touch-none">
+                <canvas
+                  ref={canvasRef}
+                  className="w-full cursor-crosshair touch-none"
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseOut={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                />
+              </div>
+            </div>
+            <div className="p-4 flex gap-3 bg-gray-50">
+              <button onClick={clearCanvas} className="flex-1 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-100 transition">
+                清除重簽
+              </button>
+              <button onClick={() => onSave(canvasRef.current.toDataURL('image/png'))} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+                確認儲存
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 啟動 React 應用
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
