@@ -233,13 +233,13 @@
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
 
-              // 1. 畫白色粗邊框 (確保深色背景下依然清楚)
+              // 1. 畫白色粗邊框 (再次調低透明度)
               ctx.lineWidth = 6;
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
               ctx.strokeText("回收設備專用", 0, 0);
 
-              // 2. 畫紅色半透明字體
-              ctx.fillStyle = 'rgba(255, 0, 0, 0.6)'; 
+              // 2. 畫紅色半透明字體 (再次調低透明度)
+              ctx.fillStyle = 'rgba(255, 0, 0, 0.12)'; 
               ctx.fillText("回收設備專用", 0, 0);
 
               ctx.restore(); // 恢復畫布狀態
