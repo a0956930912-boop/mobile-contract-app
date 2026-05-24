@@ -122,6 +122,7 @@
           ...prev, 
           name: '', phone: '', idNumber: '', brand: '', model: '', imei: '', amount: ''
         }));
+        // 保留簽名與證件狀態？不需要，全部清空
         setImages({ idFront: null, idBack: null, signature: null });
         setPreviewDataUrl(null);
         setShowResetConfirm(false);
@@ -424,6 +425,7 @@
       );
     }
 
+    // --- 掃描功能 ---
     function BarcodeScannerModal({ onScan, onClose }) {
       const scannerRef = useRef(null);
       const [errorMsg, setErrorMsg] = useState("");
@@ -497,26 +499,37 @@
       );
     }
 
+    // --- 【修復重點】簽名板：修復畫布尺寸抓取異常與觸控狀態 ---
     function SignatureModal({ onSave, onClose }) {
       const canvasRef = useRef(null);
       const containerRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false); // 新增繪圖狀態追蹤
 
       useEffect(() => {
         document.body.classList.add('modal-open');
-        const canvas = canvasRef.current;
-        const container = containerRef.current;
-        if (!canvas || !container) return;
-
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
         
-        const ctx = canvas.getContext('2d');
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = '#000000';
+        // 延遲 100 毫秒初始化，確保 Modal 完全展開後才去抓取尺寸，避免畫布變成 0x0
+        const initCanvas = () => {
+          const canvas = canvasRef.current;
+          const container = containerRef.current;
+          if (!canvas || !container) return;
 
-        return () => document.body.classList.remove('modal-open');
+          canvas.width = container.clientWidth;
+          canvas.height = container.clientHeight;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#000000';
+        };
+
+        const timer = setTimeout(initCanvas, 100);
+
+        return () => {
+          clearTimeout(timer);
+          document.body.classList.remove('modal-open');
+        };
       }, []);
 
       const getCoordinates = (e) => {
@@ -530,7 +543,7 @@
       };
 
       const startDrawing = (e) => {
-        e.preventDefault();
+        setIsDrawing(true); // 開始畫圖
         const ctx = canvasRef.current.getContext('2d');
         const { x, y } = getCoordinates(e);
         ctx.beginPath();
@@ -538,12 +551,17 @@
       };
 
       const draw = (e) => {
-        e.preventDefault();
-        if (e.buttons !== 1 && !e.touches) return;
+        if (!isDrawing) return; // 如果不是在按下的狀態就不畫
         const ctx = canvasRef.current.getContext('2d');
         const { x, y } = getCoordinates(e);
         ctx.lineTo(x, y);
         ctx.stroke();
+      };
+
+      const stopDrawing = () => {
+        setIsDrawing(false); // 停止畫圖
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.closePath();
       };
 
       const clearCanvas = () => {
@@ -564,11 +582,19 @@
           </div>
           
           <div ref={containerRef} className="flex-grow relative bg-white m-2 rounded-xl shadow-inner border-2 border-gray-300 overflow-hidden touch-none">
+            {/* 補上完整的觸控與滑鼠事件綁定 */}
             <canvas
               ref={canvasRef}
               className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
-              onMouseDown={startDrawing} onMouseMove={draw}
-              onTouchStart={startDrawing} onTouchMove={draw}
+              style={{ touchAction: 'none' }}
+              onMouseDown={startDrawing} 
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseOut={stopDrawing}
+              onTouchStart={startDrawing} 
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+              onTouchCancel={stopDrawing}
             />
           </div>
 
