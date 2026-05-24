@@ -30,6 +30,8 @@
     const IconDownload = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
     const IconX = ({ size = 20, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
     const IconAlertTriangle = ({ size = 20, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+    const IconCheckCircle = ({ size = 24, className = "" }) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 10 0 1-5.93 9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+    const IconLoader = ({ size = 24, className = "" }) => <svg width={size} height={size} className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>;
 
     function App() {
       const [step, setStep] = useState(1);
@@ -40,6 +42,9 @@
       const [showScanner, setShowScanner] = useState(false);
       const [showSignature, setShowSignature] = useState(false);
       const [previewDataUrl, setPreviewDataUrl] = useState(null);
+      
+      const [showResetConfirm, setShowResetConfirm] = useState(false); 
+      const [isGenerating, setIsGenerating] = useState(false); // 新增：處理中狀態防呆
 
       const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -76,39 +81,64 @@
         });
       };
 
-      // 下載 JPG 的安全做法 (避免手機瀏覽器阻擋大量資料的 Data URI 下載)
+      // 最穩定的下載處理方式 (相容所有手機與瀏覽器)
       const handleDownloadClick = () => {
         if (!previewDataUrl) return;
         
-        // 取得 IMEI 末 6 碼作為檔名，若無提供則使用時間戳防呆
         let fileName = `手機回收契約_${new Date().getTime()}.jpg`;
         if (formData.imei) {
           fileName = `${formData.imei.slice(-6)}.jpg`;
         }
         
-        fetch(previewDataUrl)
-          .then(res => res.blob())
-          .then(blob => {
-            const blobUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = blobUrl;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(blobUrl);
-            document.body.removeChild(a);
-          })
-          .catch(err => {
-            // Fallback: 如果 Blob 失敗，退回使用傳統方式
-            const a = document.createElement('a');
-            a.href = previewDataUrl;
-            a.download = fileName;
-            a.click();
-          });
+        try {
+          // 手動將 Data URL 轉換為 Blob，避免部分手機 fetch 報錯
+          const parts = previewDataUrl.split(';base64,');
+          const contentType = parts[0].split(':')[1];
+          const raw = window.atob(parts[1]);
+          const rawLength = raw.length;
+          const uInt8Array = new Uint8Array(rawLength);
+          for (let i = 0; i < rawLength; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+          }
+          const blob = new Blob([uInt8Array], { type: contentType });
+          const blobUrl = window.URL.createObjectURL(blob);
+          
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = blobUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(a);
+        } catch (e) {
+          // 終極備案
+          const a = document.createElement('a');
+          a.href = previewDataUrl;
+          a.download = fileName;
+          a.click();
+        }
       };
 
+      // 確認清空資料並返回首頁
+      const executeReset = () => {
+        setFormData(prev => ({
+          ...prev, // 保留店名
+          name: '', phone: '', idNumber: '', brand: '', model: '', imei: '', amount: ''
+        }));
+        setImages({ idFront: null, idBack: null, signature: null });
+        setPreviewDataUrl(null);
+        setShowResetConfirm(false);
+        setStep(1);
+      };
+
+      // 產生預覽
       const generatePreview = async () => {
+        setIsGenerating(true); // 開啟載入狀態防呆
+        
+        // 稍微延遲讓 React 有時間更新 UI 顯示「處理中...」
+        await new Promise(resolve => setTimeout(resolve, 50)); 
+        
         try {
           const canvas = document.createElement('canvas');
           canvas.width = 1240; 
@@ -119,19 +149,18 @@
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
           ctx.fillStyle = '#000000';
-          const paddingLeft = 100; // 邊距往左拉一點
+          const paddingLeft = 100;
 
-          // 標題字體
+          // 標題
           ctx.font = 'bold 50px "Microsoft JhengHei", "PingFang TC", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           ctx.fillText('買　賣　契　約　書', canvas.width / 2, 180);
 
-          // 內容字體稍微縮小為 28px，避免超出邊界
+          // 內容
           ctx.font = '28px "Microsoft JhengHei", "PingFang TC", sans-serif';
           ctx.textAlign = 'left';
 
-          // 繪製包含底線與資料的輔助函式
           const drawLineWithData = (label, data, x, y, lineLength) => {
             ctx.fillText(label, x, y);
             const labelWidth = ctx.measureText(label).width;
@@ -152,17 +181,16 @@
             return startLineX + lineLength + 20; 
           };
 
-          // --- 第 1 行：茲本人、品牌、型號 ---
-          // 稍微縮減畫線長度，避免超出右側邊界
+          // --- 第 1 行 ---
           let currentX = paddingLeft;
           currentX = drawLineWithData('茲本人', formData.name, currentX, 300, 160);
           currentX = drawLineWithData('所有品牌', formData.brand, currentX, 300, 220);
           drawLineWithData('型號', formData.model, currentX, 300, 260);
 
-          // --- 第 2 行：序號 ---
+          // --- 第 2 行 ---
           drawLineWithData('序號', formData.imei, paddingLeft, 400, 900);
 
-          // --- 第 3~6 行：聲明條文 (手動精準換行，避免右側超出邊界不見) ---
+          // --- 第 3~6 行 (手動斷行) ---
           let contentY = 520;
           let lineGap = 70;
           const storeLabel = formData.storeName || '　　　　';
@@ -171,7 +199,7 @@
           ctx.fillText('公司無關，', paddingLeft, contentY + lineGap * 2);
           ctx.fillText('口說無憑，特立此據為證', paddingLeft, contentY + lineGap * 3);
 
-          // --- 第 7~8 行：此致 台照 ---
+          // --- 第 7~8 行 ---
           ctx.fillText('此致', paddingLeft, contentY + lineGap * 4 + 40);
           ctx.fillText('　　　　台照', paddingLeft, contentY + lineGap * 5 + 40);
 
@@ -207,50 +235,44 @@
           currentX = drawLineWithData('月', day, currentX, 1340, 60);
           ctx.fillText('日', currentX, 1340);
 
-          // --- 身分證區塊 (加入強化的浮水印) ---
+          // --- 身分證區塊與浮水印 ---
           const drawIDCard = async (src, x, y, label) => {
             const w = 420;
             const h = 260;
             
-            // 畫虛線框
             ctx.setLineDash([10, 10]);
             ctx.strokeStyle = '#999999';
             ctx.lineWidth = 2;
             ctx.strokeRect(x, y, w, h);
-            ctx.setLineDash([]); // 恢復實線
+            ctx.setLineDash([]); 
 
             if (src) {
               const img = await loadImage(src);
-              // 計算等比例縮放以適應
               ctx.drawImage(img, x, y, w, h);
 
-              // --- 加入浮水印 ---
-              ctx.save(); // 儲存當前畫布狀態
-              ctx.translate(x + w / 2, y + h / 2); // 將原點移動到圖片中心
-              ctx.rotate(-30 * Math.PI / 180); // 旋轉 -30 度
+              ctx.save(); 
+              ctx.translate(x + w / 2, y + h / 2);
+              ctx.rotate(-30 * Math.PI / 180); 
 
               ctx.font = 'bold 45px "Microsoft JhengHei", "PingFang TC", sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
 
-              // 1. 畫白色粗邊框 (再次調低透明度)
+              // 超淡浮水印設定
               ctx.lineWidth = 6;
               ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
               ctx.strokeText("回收設備專用", 0, 0);
 
-              // 2. 畫紅色半透明字體 (再次調低透明度)
               ctx.fillStyle = 'rgba(255, 0, 0, 0.12)'; 
               ctx.fillText("回收設備專用", 0, 0);
 
-              ctx.restore(); // 恢復畫布狀態
-              // -----------------
+              ctx.restore(); 
 
             } else {
               ctx.fillStyle = '#999999';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillText(label, x + w / 2, y + h / 2);
-              // 恢復設定
               ctx.fillStyle = '#000000';
               ctx.textAlign = 'left';
               ctx.textBaseline = 'bottom';
@@ -260,12 +282,15 @@
           await drawIDCard(images.idFront, paddingLeft + 50, 1420, '身分證正面放置區');
           await drawIDCard(images.idBack, paddingLeft + 550, 1420, '身分證反面放置區');
 
-          setPreviewDataUrl(canvas.toDataURL('image/jpeg', 0.9));
-          setStep(2);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          setPreviewDataUrl(dataUrl);
+          setStep(2); // 確實切換到預覽步驟
 
         } catch (error) {
-          alert("產生預覽時發生錯誤！");
+          alert("處理圖片時發生錯誤，請稍後再試！\n錯誤原因：" + error.message);
           console.error(error);
+        } finally {
+          setIsGenerating(false); // 關閉載入狀態
         }
       };
 
@@ -278,7 +303,7 @@
             </h1>
           </header>
 
-          <main className="max-w-lg mx-auto p-4 space-y-6 mt-2">
+          <main className="max-w-lg mx-auto p-4 mt-2">
             
             {step === 1 && (
               <div className="space-y-6">
@@ -397,17 +422,21 @@
                   </div>
                 </section>
 
-                <div className="pt-4">
-                  <button onClick={generatePreview} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                    <IconFileCheck size={24} />
-                    產生契約書預覽
+                <div className="pt-4 pb-10">
+                  <button 
+                    onClick={generatePreview} 
+                    disabled={isGenerating}
+                    className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition flex items-center justify-center gap-2 ${isGenerating ? 'bg-blue-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                  >
+                    {isGenerating ? <IconLoader size={24} /> : <IconFileCheck size={24} />}
+                    {isGenerating ? '產生中，請稍候...' : '產生契約書預覽'}
                   </button>
                 </div>
               </div>
             )}
 
             {step === 2 && previewDataUrl && (
-              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center mt-2">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center">
                 <div className="w-full flex justify-between items-center mb-4">
                   <h2 className="text-lg font-bold">合約預覽</h2>
                   <button onClick={() => setStep(1)} className="text-gray-500 hover:text-gray-700 text-sm flex items-center gap-1">
@@ -418,21 +447,48 @@
                 <div className="border border-gray-200 rounded p-2 bg-gray-50 w-full mb-3 overflow-hidden relative" style={{ minHeight: '300px' }}>
                   <img src={previewDataUrl} alt="契約書預覽" className="w-full h-auto rounded shadow-sm" />
                 </div>
-                <p className="text-xs text-red-500 mb-4 font-bold">
-                  * 提示：如果點擊按鈕沒有反應，請直接「長按上方圖片」儲存。
+                <p className="text-xs text-red-500 mb-6 font-bold">
+                  * 如果點擊按鈕沒有反應，請直接「長按上方圖片」儲存。
                 </p>
 
-                <button 
-                  onClick={handleDownloadClick}
-                  className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-center"
-                >
-                  <IconDownload size={24} />
-                  下載 JPG 檔案
-                </button>
+                <div className="flex gap-3 w-full">
+                  <button 
+                    onClick={handleDownloadClick}
+                    className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-base shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-1"
+                  >
+                    <IconDownload size={20} />
+                    下載 JPG
+                  </button>
+
+                  <button 
+                    onClick={() => setShowResetConfirm(true)}
+                    className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-base shadow-lg hover:bg-blue-700 transition flex items-center justify-center gap-1"
+                  >
+                    <IconCheckCircle size={20} />
+                    完成回收
+                  </button>
+                </div>
               </div>
             )}
 
           </main>
+
+          {/* 所有跳出的視窗統一放在最外層，保證絕對不會被擋住或干擾主畫面 */}
+          {showResetConfirm && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl p-6 text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+                  <IconCheckCircle className="text-blue-600" size={24} />
+                </div>
+                <h3 className="font-bold text-lg mb-2">確定完成回收？</h3>
+                <p className="text-gray-500 text-sm mb-6">這將會清空您剛剛輸入的客戶資料，準備下一張合約（店名會自動保留）。</p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition">取消</button>
+                  <button onClick={executeReset} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">確定清空</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showScanner && (
             <BarcodeScannerModal 
@@ -457,13 +513,12 @@
       );
     }
 
-    // --- 子組件：條碼掃描器 (加入安全偵測與錯誤提示) ---
+    // --- 子組件：條碼掃描器 ---
     function BarcodeScannerModal({ onScan, onClose }) {
       const scannerRef = useRef(null);
       const [errorMsg, setErrorMsg] = useState("");
 
       useEffect(() => {
-        // 1. 偵測環境是否為 HTTP / FILE 協定 (這會導致相機被瀏覽器阻擋)
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const isSecure = window.location.protocol === 'https:' || isLocalhost;
         
@@ -471,7 +526,6 @@
           setErrorMsg("⚠️ 瀏覽器安全限制：掃描功能必須將網站發布至 HTTPS 環境 (或 localhost) 才能開啟相機。目前環境無法存取鏡頭。");
         }
 
-        // 2. 載入掃描套件
         const loadHtml5Qrcode = async () => {
           try {
             if (!window.Html5QrcodeScanner) {
@@ -491,7 +545,7 @@
                 fps: 10, 
                 qrbox: {width: 250, height: 150}, 
                 aspectRatio: 1.0,
-                videoConstraints: { facingMode: "environment" } // 強制使用後置鏡頭
+                videoConstraints: { facingMode: "environment" } 
               },
               false
             );
@@ -500,9 +554,7 @@
             html5QrcodeScanner.render((decodedText) => {
               if(scannerRef.current) scannerRef.current.clear();
               onScan(decodedText);
-            }, (error) => {
-              // 此處會捕捉每一幀掃描不到條碼的錯誤，為正常現象，不需處理
-            });
+            }, () => {});
           } catch (err) {
             setErrorMsg("相機初始化失敗，請確認已在系統設定允許瀏覽器使用相機！");
             console.error(err);
@@ -524,7 +576,6 @@
               <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800"><IconX size={20} /></button>
             </div>
             
-            {/* 錯誤訊息區塊 */}
             {errorMsg && (
               <div className="bg-red-50 p-3 text-red-600 text-sm flex gap-2 items-start border-b border-red-100">
                 <IconAlertTriangle className="shrink-0 mt-0.5" size={16} />
