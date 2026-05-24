@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Camera, PenTool, Smartphone, ScanLine, FileCheck, X, Download, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 
 export default function App() {
-  // 直接從 step 1 開始，完全不需要底圖
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     storeName: '立方通訊', name: '', phone: '', idNumber: '', brand: '', model: '', imei: '', amount: ''
@@ -47,22 +46,16 @@ export default function App() {
     });
   };
 
-  // 穩定版下載邏輯 (檔名為 IMEI 末 6 碼)
-  const handleDownloadClick = () => {
+  // 穩定版下載邏輯 (改用 fetch Blob 避免二進位轉換亂碼)
+  const handleDownloadClick = async () => {
     if (!previewDataUrl) return;
     
     let fileName = `手機回收契約_${new Date().getTime()}.jpg`;
     if (formData.imei) fileName = `${formData.imei.slice(-6)}.jpg`;
     
     try {
-      const parts = previewDataUrl.split(';base64,');
-      const contentType = parts[0].split(':')[1];
-      const raw = window.atob(parts[1]);
-      const rawLength = raw.length;
-      const uInt8Array = new Uint8Array(rawLength);
-      for (let i = 0; i < rawLength; ++i) uInt8Array[i] = raw.charCodeAt(i);
-      
-      const blob = new Blob([uInt8Array], { type: contentType });
+      const res = await fetch(previewDataUrl);
+      const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       
       const a = document.createElement('a');
@@ -109,13 +102,13 @@ export default function App() {
       ctx.fillStyle = '#000000';
       const paddingLeft = 100;
 
-      // 標題
-      ctx.font = 'bold 50px "Microsoft JhengHei", "PingFang TC", sans-serif';
+      // 標題 (使用系統預設字體，防止亂碼)
+      ctx.font = 'bold 50px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText('買　賣　契　約　書', canvas.width / 2, 180);
+      ctx.fillText('買 賣 契 約 書', canvas.width / 2, 180);
 
-      ctx.font = '28px "Microsoft JhengHei", "PingFang TC", sans-serif';
+      ctx.font = '28px sans-serif';
       ctx.textAlign = 'left';
 
       const drawLineWithData = (label, data, x, y, lineLength) => {
@@ -147,14 +140,14 @@ export default function App() {
       // --- 條文 ---
       let contentY = 520;
       let lineGap = 70;
-      const storeLabel = formData.storeName || '　　　　';
-      ctx.fillText(`　　本人確實讓渡無訛，保證來源正常，為個人所有，自即日起交由　${storeLabel}　管理，`, paddingLeft, contentY);
+      const storeLabel = formData.storeName || '    ';
+      ctx.fillText(`  本人確實讓渡無訛，保證來源正常，為個人所有，自即日起交由 ${storeLabel} 管理，`, paddingLeft, contentY);
       ctx.fillText('嗣後如有衍生民、刑事、及其糾紛等情事，概由本人負全責且放棄先訴抗辯權，並與貴', paddingLeft, contentY + lineGap);
       ctx.fillText('公司無關，', paddingLeft, contentY + lineGap * 2);
       ctx.fillText('口說無憑，特立此據為證', paddingLeft, contentY + lineGap * 3);
 
       ctx.fillText('此致', paddingLeft, contentY + lineGap * 4 + 40);
-      ctx.fillText('　　　　台照', paddingLeft, contentY + lineGap * 5 + 40);
+      ctx.fillText('    台照', paddingLeft, contentY + lineGap * 5 + 40);
 
       // --- 金額 ---
       const parsedAmount = parseAmount(formData.amount);
@@ -200,7 +193,7 @@ export default function App() {
           ctx.translate(x + w / 2, y + h / 2);
           ctx.rotate(-30 * Math.PI / 180); 
 
-          ctx.font = 'bold 45px "Microsoft JhengHei", "PingFang TC", sans-serif';
+          ctx.font = 'bold 45px sans-serif';
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
           // 超淡浮水印設定 (白邊0.2 / 紅字0.12)
